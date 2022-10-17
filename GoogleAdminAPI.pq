@@ -26,7 +26,7 @@ GoogleAdminAPI = [
 StartLogin = (resourceUrl, state, display) =>
     let
         AuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth?" & Uri.BuildQueryString([
-            client_id = client_id,
+            client_id = client_id, // TODO add before testing
             scope = "https://www.googleapis.com/auth/admin.reports.audit.readonly",
             state = state,
             redirect_uri = "https://oauth.powerbi.com/views/oauthredirect.html"
@@ -38,7 +38,27 @@ StartLogin = (resourceUrl, state, display) =>
             WindowHeight = windowHeight,
             WindowWidth = windowWidth,
             Context = null
-        ]
+        ];
+FinishLogin = (context, callbackUri, state) =>
+    let
+        Parts = Uri.Parts(callbackUri)[Query]
+    in 
+        TokenMethod(Parts[code]);
+
+TokenMethod = (code) =>
+    let
+        Response = Web.Contents("https://oauth2.googleapis.com", [
+            Content = Text.ToBinary(Uri.BuildQueryString([
+                client_id = client_id, // TODO fill in securely
+                client_secret = client_secret, // TODO fill in securely
+                code = code,
+                redirect_uri = "https://oauth.powerbi.com/views/oauthredirect.html"
+            ])),
+            Headers=[#"Content-type" = "application/x-www-form-urlencoded",#"Accept" = "application/json"]
+        ]),
+        Parts = Json.Document(Response)
+    in 
+        Parts;
 
 // Data Source UI publishing description
 GoogleAdminAPI.Publish = [
