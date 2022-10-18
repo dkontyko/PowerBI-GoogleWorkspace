@@ -23,10 +23,17 @@ GoogleAdminAPI = [
     ]
 ];
 
+// adapted from https://github.com/microsoft/DataConnectors/blob/master/samples/OAuthPKCE/PKCESample.pq
+// see license at that repo
+
 StartLogin = (resourceUrl, state, display) =>
     let
+        codeVerifier = Text.NewGuid() & Text.NewGuid(),
         AuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth?" & Uri.BuildQueryString([
             client_id = client_id, // TODO add before testing
+            response_type = "code",
+            code_challenge_method = "plain",
+            code_challenge = codeVerifier,
             scope = "https://www.googleapis.com/auth/admin.reports.audit.readonly",
             state = state,
             redirect_uri = "https://oauth.powerbi.com/views/oauthredirect.html"
@@ -37,28 +44,43 @@ StartLogin = (resourceUrl, state, display) =>
             CallbackUri = "https://oauth.powerbi.com/views/oauthredirect.html",
             WindowHeight = windowHeight,
             WindowWidth = windowWidth,
-            Context = null
+            Context = codeVerifier
         ];
 FinishLogin = (context, callbackUri, state) =>
     let
         Parts = Uri.Parts(callbackUri)[Query]
     in 
-        TokenMethod(Parts[code]);
+        TokenMethod(Parts[code], "authorization_code", context);
 
-TokenMethod = (code) =>
+TokenMethod = (code, grant_type, optional verifier) =>
     let
+        codeVerifier = if (verifier <> null) then [code_verifier = verifier] else [],
+        codeParameter = if (grant_type = "authorization_code") then [code = code] else [refresh_token = code],
+        query = codeVerifier & codeParameter & [
+            client_id = client_id,
+            //client_secret = client_secret, // Will Google require this???
+            grant_type = grant_type,
+            redirect_uri = "https://oauth.powerbi.com/views/oauthredirect.html"
+        ],
+
+        ManualHandlingStatusCodes = {400, 403},
+
         Response = Web.Contents("https://oauth2.googleapis.com", [
-            Content = Text.ToBinary(Uri.BuildQueryString([
-                client_id = client_id, // TODO fill in securely
-                client_secret = client_secret, // TODO fill in securely
-                code = code,
-                redirect_uri = "https://oauth.powerbi.com/views/oauthredirect.html"
-            ])),
-            Headers=[#"Content-type" = "application/x-www-form-urlencoded",#"Accept" = "application/json"]
+            Content = Text.ToBinary(Uri.BuildQueryString(query)),
+            Headers=[
+                #"Content-type" = "application/x-www-form-urlencoded",
+                #"Accept" = "application/json"
+            ]
         ]),
         Parts = Json.Document(Response)
     in 
-        Parts;
+        // checking for error in response
+        if(Parts[Error]? <> null) then
+            error Error.Record(Parts[error], Parts[message]?)
+        else
+            Parts;
+
+Refresh = (resourceUrl, refresh_token) => TokenMethod(refresh_token, "refresh_token");
 
 // Data Source UI publishing description
 GoogleAdminAPI.Publish = [
