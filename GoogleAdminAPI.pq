@@ -2,6 +2,9 @@
 [Version = "0.1.0"]
 section GoogleAdminAPI;
 
+windowHeight = "600";
+windowWidth = "1000";
+
 [DataSource.Kind="GoogleAdminAPI", Publish="GoogleAdminAPI.Publish"]
 shared GoogleAdminAPI.Contents = (optional message as text) =>
     let
