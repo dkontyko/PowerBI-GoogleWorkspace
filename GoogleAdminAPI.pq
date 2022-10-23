@@ -2,8 +2,13 @@
 [Version = "0.1.0"]
 section GoogleAdminAPI;
 
-windowHeight = "600";
-windowWidth = "1000";
+windowHeight = 600;
+windowWidth = 1000;
+
+// This ID and secret belong to the Google Sheets connector distributed with PBI Desktop.
+// As such, they are not actually secret.
+client_id = "836582736780-j225jgqf50956ed5qjm6ratl3up80bk1.apps.googleusercontent.com";
+client_secret = "c0fwt1FXY0JxNprsL8awxoSb";
 
 [DataSource.Kind="GoogleAdminAPI", Publish="GoogleAdminAPI.Publish"]
 shared GoogleAdminAPI.Contents = (optional message as text) =>
@@ -16,12 +21,10 @@ shared GoogleAdminAPI.Contents = (optional message as text) =>
 // Data Source Kind description
 GoogleAdminAPI = [
     Authentication = [
-        // Key = [],
-        // UsernamePassword = [],
-        // Windows = [],
         OAuth = [
             StartLogin = StartLogin,
-            FinishLogin = FinishLogin
+            FinishLogin = FinishLogin,
+            Refresh=Refresh
         ]
     ]
 ];
@@ -33,11 +36,12 @@ StartLogin = (resourceUrl, state, display) =>
     let
         codeVerifier = Text.NewGuid() & Text.NewGuid(),
         AuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth?" & Uri.BuildQueryString([
-            client_id = client_id, // TODO add before testing
+            client_id = client_id,
             response_type = "code",
             code_challenge_method = "plain",
             code_challenge = codeVerifier,
             scope = "https://www.googleapis.com/auth/admin.reports.audit.readonly",
+            //scope = "https://www.googleapis.com/auth/admin.directory.user",
             state = state,
             redirect_uri = "https://oauth.powerbi.com/views/oauthredirect.html"
         ])
@@ -61,14 +65,14 @@ TokenMethod = (code, grant_type, optional verifier) =>
         codeParameter = if (grant_type = "authorization_code") then [code = code] else [refresh_token = code],
         query = codeVerifier & codeParameter & [
             client_id = client_id,
-            //client_secret = client_secret, // Will Google require this???
+            client_secret = client_secret, // Will Google require this???
             grant_type = grant_type,
             redirect_uri = "https://oauth.powerbi.com/views/oauthredirect.html"
         ],
 
         ManualHandlingStatusCodes = {400, 403},
 
-        Response = Web.Contents("https://oauth2.googleapis.com", [
+        Response = Web.Contents("https://oauth2.googleapis.com/token", [
             Content = Text.ToBinary(Uri.BuildQueryString(query)),
             Headers=[
                 #"Content-type" = "application/x-www-form-urlencoded",
